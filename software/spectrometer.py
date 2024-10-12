@@ -10,7 +10,7 @@ import os
 class SpectrumAnalyzerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Spectrum Analyzer with Selectable ROI")
+        self.root.title("Webcam Spectrum Analyzer")
 
         # Capture video from webcam
         self.cap = cv2.VideoCapture(4)
@@ -40,7 +40,7 @@ class SpectrumAnalyzerApp:
         self.fig, self.ax = plt.subplots()  # Create the figure and axis for the plot
         self.line, = self.ax.plot([], [])  # Initialize the plot with an empty line
 
-        # Add a menu for saving/reloading the spectrum
+        # Add a menu for saving/reloading/recalibrating the spectrum
         self.create_menu()
 
         # Bind mouse events for ROI selection
@@ -52,11 +52,13 @@ class SpectrumAnalyzerApp:
         self.update_frame()
 
     def create_menu(self):
-        """Create a menu for saving and reloading spectra."""
+        """Create a menu for saving, reloading, and recalibrating the spectrum."""
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Save Spectrum", command=self.save_spectrum)
         filemenu.add_command(label="Reload Spectrum", command=self.reload_spectrum)
+        filemenu.add_command(label="Recalibrate Spectrum", command=self.recalibrate)
+        
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -122,6 +124,15 @@ class SpectrumAnalyzerApp:
         self.ax.set_xlabel('Wavelength (nm)')
         self.ax.set_ylabel('Intensity')
         self.ax.set_title('Real-time Spectral Intensity')
+
+    def recalibrate(self):
+
+        self.start_wavelength = float(simpledialog.askstring("Calibration", "Enter the start wavelength (e.g., 400 nm):"))
+        self.end_wavelength = float(simpledialog.askstring("Calibration", "Enter the end wavelength (e.g., 700 nm):"))
+
+        if self.roi_start_x and self.roi_end_x:
+            num_pixels = self.roi_end_x - self.roi_start_x
+            self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
 
     def update_frame(self):
         """Continuously update the webcam feed and ROI in real-time."""
