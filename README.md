@@ -18,3 +18,5 @@ To build your own ir/vis Spectrometer you will need the following parts:
 - Razor blade / tape / dark paper to create a very thin slit
 
 The main idea of this project is to use a refraction grating to split the different wavelengths of the light, which will then be captured by the webcam. The relative intensities will be evaluated and plotted by this software.
+
+Further information can be found (here)[spectrometer/README.md]
