@@ -2,4 +2,4 @@ opencv-python
 PyQt5
 pillow
 matplotlib
-pyjson
+numpy

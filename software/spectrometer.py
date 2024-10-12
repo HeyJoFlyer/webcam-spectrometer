@@ -165,8 +165,12 @@ class SpectrumAnalyzerApp:
         roi_gray = cv2.cvtColor(roi, cv2.COLOR_RGB2GRAY)
         column_sum = np.sum(roi_gray, axis=0)  # Sum along the vertical axis
 
+        # Ignore the first and last few columns to avoid edge effects
+        column_sum = column_sum[2:-2]
+        wavelength_range = self.pixel_to_wavelength[2:-2]
+
         # Update the plot with the new data
-        self.line.set_xdata(self.pixel_to_wavelength)
+        self.line.set_xdata(wavelength_range)
         self.line.set_ydata(column_sum)
         self.ax.relim()  # Recalculate limits
         self.ax.autoscale_view(True, True, True)  # Autoscale the view to fit new data
