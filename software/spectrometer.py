@@ -4,6 +4,8 @@ from tkinter import Label, Toplevel, simpledialog, filedialog, messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import colors
+import matplotlib.cm as cm
 import json
 import os
 
@@ -13,7 +15,7 @@ class SpectrumAnalyzerApp:
         self.root.title("Webcam Spectrum Analyzer")
 
         # Capture video from webcam
-        self.cap = cv2.VideoCapture(4)
+        self.cap = cv2.VideoCapture(4) # Adjust this according to your webcam selection, will be removed in the future
 
         # Create a label to display the frames
         self.label = Label(root)
@@ -39,6 +41,7 @@ class SpectrumAnalyzerApp:
         plt.ion()  # Enable interactive mode for real-time updating
         self.fig, self.ax = plt.subplots()  # Create the figure and axis for the plot
         self.line, = self.ax.plot([], [])  # Initialize the plot with an empty line
+        self.colorbar = None
 
         # Add a menu for saving/reloading/recalibrating the spectrum
         self.create_menu()
@@ -170,6 +173,49 @@ class SpectrumAnalyzerApp:
         # Repeat after 10 ms
         self.root.after(10, self.update_frame)
 
+    def wavelength_to_rgb(self, wavelength, gamma=0.8):
+        wavelength = float(wavelength)
+        if wavelength >= 380 and wavelength <= 750:
+            A = 1.0
+        else:
+            A=0.5
+        if wavelength < 380:
+            wavelength = 380.
+        if wavelength >750:
+            wavelength = 750.
+        if wavelength >= 380 and wavelength <= 440:
+            attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380)
+            R = ((-(wavelength - 440) / (440 - 380)) * attenuation) ** gamma
+            G = 0.0
+            B = (1.0 * attenuation) ** gamma
+        elif wavelength >= 440 and wavelength <= 490:
+            R = 0.0
+            G = ((wavelength - 440) / (490 - 440)) ** gamma
+            B = 1.0
+        elif wavelength >= 490 and wavelength <= 510:
+            R = 0.0
+            G = 1.0
+            B = (-(wavelength - 510) / (510 - 490)) ** gamma
+        elif wavelength >= 510 and wavelength <= 580:
+            R = ((wavelength - 510) / (580 - 510)) ** gamma
+            G = 1.0
+            B = 0.0
+        elif wavelength >= 580 and wavelength <= 645:
+            R = 1.0
+            G = (-(wavelength - 645) / (645 - 580)) ** gamma
+            B = 0.0
+        elif wavelength >= 645 and wavelength <= 750:
+            attenuation = 0.3 + 0.7 * (750 - wavelength) / (750 - 645)
+            R = (1.0 * attenuation) ** gamma
+            G = 0.0
+            B = 0.0
+        else:
+            R = 0.0
+            G = 0.0
+            B = 0.0
+        return (R, G, B, A)
+
+
     def plot_spectrum(self, roi):
         """Sum the columns of the ROI and update the intensity graph in real-time."""
         # Sum the columns to get the intensity for each column (wavelength)
@@ -180,11 +226,25 @@ class SpectrumAnalyzerApp:
         column_sum = column_sum[2:-2]
         wavelength_range = self.pixel_to_wavelength[2:-2]
 
+
+        # Create colorlist
+        wl = np.arange(self.start_wavelength, self.end_wavelength + 1, 2)
+        colorlist = [self.wavelength_to_rgb(w) for w in wl]
+        
+        # Clear Plot
+        self.ax.cla()
+
         # Update the plot with the new data
         self.line.set_xdata(wavelength_range)
         self.line.set_ydata(column_sum)
-        self.ax.relim()  # Recalculate limits
+        self.ax.relim()
         self.ax.autoscale_view(True, True, True)  # Autoscale the view to fit new data
+
+        # Color surface under plot with correct color (according to wavelength)
+        #for i in range(self.roi_end_x - self.roi_start_x - 1):
+        #   self.ax.fill_between(wavelength_range[i:i+2], 0, column_sum[i:i+1], color=colorlist[i])
+        self.ax.fill_between(wavelength_range, 0, column_sum)
+        
         self.fig.canvas.draw()  # Redraw the figure
 
     def save_spectrum(self):
@@ -240,6 +300,8 @@ class SpectrumAnalyzerApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
+    icon = tk.PhotoImage(file="software/spectrometer.png")
+    root.iconphoto(False, icon)
     app = SpectrumAnalyzerApp(root)
     root.protocol("WM_DELETE_WINDOW", app.on_close)
     root.mainloop()
