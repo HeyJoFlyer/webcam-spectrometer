@@ -14,8 +14,11 @@ class SpectrumAnalyzerApp:
         self.root = root
         self.root.title("Webcam Spectrum Analyzer")
 
+        self.webcam_id : int = 0
+
         # Capture video from webcam
-        self.cap = cv2.VideoCapture(0) # Adjust this according to your webcam selection, will be removed in the future
+        self.cap = cv2.VideoCapture(self.webcam_id) # Adjust this according to your webcam selection, will be removed in the future
+        
         self.flipped = False
 
         # Create a label to display the frames
@@ -59,13 +62,13 @@ class SpectrumAnalyzerApp:
         """Create a menu for saving, reloading, and recalibrating the spectrum."""
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Save Spectrum", command=self.save_spectrum)
-        filemenu.add_command(label="Reload Spectrum", command=self.reload_spectrum)
+        filemenu.add_command(label="Save Calibration Data", command=self.save_spectrum)
+        filemenu.add_command(label="Reload Calibration Data", command=self.reload_spectrum)
         filemenu.add_command(label="Recalibrate Spectrum", command=self.recalibrate)
-        
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=filemenu)
+
         menubar.add_command(label="Flip horizontally", command=self.flip)
         self.root.config(menu=menubar)
 
@@ -102,7 +105,7 @@ class SpectrumAnalyzerApp:
         """Create a separate window to display the selected ROI."""
         if not self.roi_window:
             self.roi_window = Toplevel(self.root)
-            self.roi_window.title("Selected Spectrum ROI")
+            self.roi_window.title("Selected Spectrum")
             icon = tk.PhotoImage(file="software/spectrometer.png")
             self.roi_window.iconphoto(False, icon)
             self.roi_label = Label(self.roi_window)
@@ -131,9 +134,9 @@ class SpectrumAnalyzerApp:
             self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
 
         # Set up the plot for real-time spectrum updates
-        self.ax.set_xlabel('Wavelength (nm)')
-        self.ax.set_ylabel('Intensity')
-        self.ax.set_title('Real-time Spectral Intensity')
+        self.ax.set_xlabel("Wavelength (nm)")
+        self.ax.set_ylabel("Intensity")
+        self.ax.set_title("Spectral Intensity")
 
     def recalibrate(self):
 
@@ -150,7 +153,7 @@ class SpectrumAnalyzerApp:
         ret, frame = self.cap.read()
         
         if self.flipped == True:
-            frame = cv2.flip(frame, 1) #Flip each Frame
+            frame = cv2.flip(frame, 1) #Flip each Frame if flip is selected
 
         if ret:
             # Convert the frame to RGB (since OpenCV uses BGR by default)
@@ -261,52 +264,45 @@ class SpectrumAnalyzerApp:
         """Save the ROI and calibration data."""
         if self.roi_start_x and self.roi_end_x and self.pixel_to_wavelength is not None:
             # Ask the user to choose a file name to save the spectrum
-            save_dir = filedialog.askdirectory(title="Select Directory to Save Spectrum")
-            if save_dir:
-                # Save the ROI image
-                frame = self.cap.read()[1]
+            filename = filedialog.asksaveasfile(title="Save calibration data as", defaultextension=".json", filetypes=[("JSON Files", "*.json")])
 
-                if self.flipped == True:
-                    frame = cv2.flip(frame, 1) # Flip each frame
-
-                roi = frame[self.roi_start_y:self.roi_end_y, self.roi_start_x:self.roi_end_x]
-                roi_filename = os.path.join(save_dir, "spectrum_roi.png")
-                cv2.imwrite(roi_filename, roi)
-
-                # Save the calibration data
+            if filename:
                 calibration_data = {
+                    "webcam_id": self.webcam_id,
                     "start_wavelength": self.start_wavelength,
                     "end_wavelength": self.end_wavelength,
+                    "roi_start": (self.roi_start_x, self.roi_start_y),
+                    "roi_end": (self.roi_end_x, self.roi_end_y),
                 }
-                calibration_filename = os.path.join(save_dir, "calibration_data.json")
-                with open(calibration_filename, "w") as f:
-                    json.dump(calibration_data, f)
 
-                messagebox.showinfo("Save Successful", "Spectrum and calibration data saved successfully!")
+                json.dump(calibration_data, filename)
+                filename.close()
+
+                messagebox.showinfo("Save Successful", "Calibration data saved successfully!")
 
     def reload_spectrum(self):
         """Reload a previously saved spectrum and calibration data."""
         # Ask the user for the saved spectrum image and calibration data
-        roi_filename = filedialog.askopenfilename(title="Open Saved ROI Image", filetypes=[("Image Files", "*.png")])
-        calibration_filename = filedialog.askopenfilename(title="Open Calibration Data", filetypes=[("JSON Files", "*.json")])
+        filename = filedialog.askopenfilename(title="Open Calibration Data", filetypes=[("JSON Files", "*.json")])
 
-        if roi_filename and calibration_filename:
-            # Load the saved ROI image
-            self.saved_roi_image = cv2.imread(roi_filename)
-            self.update_roi_window(self.saved_roi_image)
-
+        if filename:
             # Load the calibration data
-            with open(calibration_filename, "r") as f:
-                calibration_data = json.load(f)
+            try:
+                with open(filename, "r") as f:
+                    calibration_data = json.load(f)
                 self.start_wavelength = calibration_data["start_wavelength"]
                 self.end_wavelength = calibration_data["end_wavelength"]
+                self.roi_start_x, self.roi_start_y = calibration_data["roi_start"]
+                self.roi_end_x, self.roi_end_y = calibration_data["roi_end"]
 
-            # Recalculate pixel-to-wavelength mapping
-            num_pixels = self.saved_roi_image.shape[1]
-            self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
+                self.show_roi_window() # Show ROI if ROI window is not currently shown
 
-            # Plot the saved spectrum
-            self.plot_spectrum(self.saved_roi_image)
+                # Recalculate pixel-to-wavelength mapping
+                num_pixels = self.roi_end_x - self.roi_start_x
+                self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
+            except:
+                messagebox.showerror("Recall Error", "Could not load calibration data from file")
+
 
     def on_close(self):
         """Clean up resources before exiting the application."""
