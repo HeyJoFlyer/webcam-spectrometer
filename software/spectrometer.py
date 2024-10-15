@@ -4,8 +4,8 @@ from tkinter import Label, Toplevel, simpledialog, filedialog, messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colors
-import matplotlib.cm as cm
+#from matplotlib import colors
+#import matplotlib.cm as cm
 import json
 import os
 
@@ -15,7 +15,8 @@ class SpectrumAnalyzerApp:
         self.root.title("Webcam Spectrum Analyzer")
 
         # Capture video from webcam
-        self.cap = cv2.VideoCapture(4) # Adjust this according to your webcam selection, will be removed in the future
+        self.cap = cv2.VideoCapture(0) # Adjust this according to your webcam selection, will be removed in the future
+        self.flipped = False
 
         # Create a label to display the frames
         self.label = Label(root)
@@ -41,7 +42,7 @@ class SpectrumAnalyzerApp:
         plt.ion()  # Enable interactive mode for real-time updating
         self.fig, self.ax = plt.subplots()  # Create the figure and axis for the plot
         self.line, = self.ax.plot([], [])  # Initialize the plot with an empty line
-        self.colorbar = None
+        #self.fig.canvas.set_window_title("Spectrum") # Name the matplotlib window
 
         # Add a menu for saving/reloading/recalibrating the spectrum
         self.create_menu()
@@ -65,7 +66,11 @@ class SpectrumAnalyzerApp:
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=filemenu)
+        menubar.add_command(label="Flip horizontally", command=self.flip)
         self.root.config(menu=menubar)
+
+    def flip(self):
+        self.flipped = not self.flipped
 
     def on_mouse_down(self, event):
         """Callback when the mouse button is pressed down, starting the ROI selection."""
@@ -98,6 +103,8 @@ class SpectrumAnalyzerApp:
         if not self.roi_window:
             self.roi_window = Toplevel(self.root)
             self.roi_window.title("Selected Spectrum ROI")
+            icon = tk.PhotoImage(file="software/spectrometer.png")
+            self.roi_window.iconphoto(False, icon)
             self.roi_label = Label(self.roi_window)
             self.roi_label.pack()
 
@@ -141,6 +148,9 @@ class SpectrumAnalyzerApp:
         """Continuously update the webcam feed and ROI in real-time."""
         # Read a frame from the webcam
         ret, frame = self.cap.read()
+        
+        if self.flipped == True:
+            frame = cv2.flip(frame, 1) #Flip each Frame
 
         if ret:
             # Convert the frame to RGB (since OpenCV uses BGR by default)
@@ -254,7 +264,12 @@ class SpectrumAnalyzerApp:
             save_dir = filedialog.askdirectory(title="Select Directory to Save Spectrum")
             if save_dir:
                 # Save the ROI image
-                roi = self.cap.read()[1][self.roi_start_y:self.roi_end_y, self.roi_start_x:self.roi_end_x]
+                frame = self.cap.read()[1]
+
+                if self.flipped == True:
+                    frame = cv2.flip(frame, 1) # Flip each frame
+
+                roi = frame[self.roi_start_y:self.roi_end_y, self.roi_start_x:self.roi_end_x]
                 roi_filename = os.path.join(save_dir, "spectrum_roi.png")
                 cv2.imwrite(roi_filename, roi)
 
