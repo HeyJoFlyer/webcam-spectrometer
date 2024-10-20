@@ -4,10 +4,7 @@ from tkinter import Label, Toplevel, simpledialog, filedialog, messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
-#from matplotlib import colors
-#import matplotlib.cm as cm
 import json
-import os
 
 class SpectrumAnalyzerApp:
     def __init__(self, root):
@@ -47,7 +44,7 @@ class SpectrumAnalyzerApp:
         self.line, = self.ax.plot([], [])  # Initialize the plot with an empty line
         #self.fig.canvas.set_window_title("Spectrum") # Name the matplotlib window
 
-        # Add a menu for saving/reloading/recalibrating the spectrum
+        # Add a menu for saving/reloading/recalibrating/reselecting the spectrum
         self.create_menu()
 
         # Bind mouse events for ROI selection
@@ -64,12 +61,16 @@ class SpectrumAnalyzerApp:
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Save Calibration Data", command=self.save_spectrum)
         filemenu.add_command(label="Reload Calibration Data", command=self.reload_spectrum)
-        filemenu.add_command(label="Recalibrate Spectrum", command=self.recalibrate)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_close)
         menubar.add_cascade(label="File", menu=filemenu)
 
-        menubar.add_command(label="Flip horizontally", command=self.flip)
+        spectrummenu = tk.Menu(menubar, tearoff=0)
+        spectrummenu.add_command(label="Flip horizontally", command=self.flip)
+        spectrummenu.add_command(label="Recalibrate Spectrum", command=self.recalibrate)
+        spectrummenu.add_command(label="Reselect ROI", command=self.reselect)
+        menubar.add_cascade(label="Spectrum", menu=spectrummenu)
+
         self.root.config(menu=menubar)
 
     def flip(self):
@@ -77,14 +78,15 @@ class SpectrumAnalyzerApp:
 
     def on_mouse_down(self, event):
         """Callback when the mouse button is pressed down, starting the ROI selection."""
-        self.roi_start_x = event.x
-        self.roi_start_y = event.y
-        self.selecting_roi = True
+        if self.roi_start_x == None:
+            self.roi_start_x = event.x
+            self.roi_start_y = event.y
+            self.selecting_roi = True
 
-        # Close the previous ROI window if any
-        if self.roi_window:
-            self.roi_window.destroy()
-            self.roi_window = None
+            # Close the previous ROI window if any
+            if self.roi_window:
+                self.roi_window.destroy()
+                self.roi_window = None
 
     def on_mouse_drag(self, event):
         """Callback when the mouse is dragged, updating the rectangle dynamically."""
@@ -125,8 +127,8 @@ class SpectrumAnalyzerApp:
     def calibrate_wavelengths(self):
         """Prompt the user to enter the start and end wavelengths for calibration."""
         # Get the calibration input from the user
-        self.start_wavelength = float(simpledialog.askstring("Calibration", "Enter the start wavelength (e.g., 400 nm):"))
-        self.end_wavelength = float(simpledialog.askstring("Calibration", "Enter the end wavelength (e.g., 700 nm):"))
+        self.start_wavelength = float(simpledialog.askstring("Calibration", "Enter the start wavelength (e.g., 400 nm):").removeprefix("nm"))
+        self.end_wavelength = float(simpledialog.askstring("Calibration", "Enter the end wavelength (e.g., 700 nm):").removeprefix("nm"))
 
         # Calculate pixel-to-wavelength mapping
         if self.roi_start_x and self.roi_end_x:
@@ -140,12 +142,25 @@ class SpectrumAnalyzerApp:
 
     def recalibrate(self):
 
-        self.start_wavelength = float(simpledialog.askstring("Calibration", "Enter the start wavelength (e.g., 400 nm):"))
-        self.end_wavelength = float(simpledialog.askstring("Calibration", "Enter the end wavelength (e.g., 700 nm):"))
+        self.start_wavelength = float(simpledialog.askstring("Calibration", "Enter the start wavelength (e.g., 400 nm):", initialvalue="400").removeprefix("nm"))
+        self.end_wavelength = float(simpledialog.askstring("Calibration", "Enter the end wavelength (e.g., 700 nm):", initialvalue="700").removeprefix("nm"))
 
         if self.roi_start_x and self.roi_end_x:
             num_pixels = self.roi_end_x - self.roi_start_x
             self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
+
+    def reselect(self):
+
+        self.roi_start_x = None
+        self.roi_start_y = None
+        self.roi_end_x = None
+        self.roi_end_y = None
+        self.selecting_roi = False
+        self.pixel_to_wavelength = None
+
+        if self.roi_window:
+                self.roi_window.destroy()
+                self.roi_window = None
 
     def update_frame(self):
         """Continuously update the webcam feed and ROI in real-time."""
@@ -269,6 +284,7 @@ class SpectrumAnalyzerApp:
             if filename:
                 calibration_data = {
                     "webcam_id": self.webcam_id,
+                    "flipped": self.flipped,
                     "start_wavelength": self.start_wavelength,
                     "end_wavelength": self.end_wavelength,
                     "roi_start": (self.roi_start_x, self.roi_start_y),
@@ -294,12 +310,17 @@ class SpectrumAnalyzerApp:
                 self.end_wavelength = calibration_data["end_wavelength"]
                 self.roi_start_x, self.roi_start_y = calibration_data["roi_start"]
                 self.roi_end_x, self.roi_end_y = calibration_data["roi_end"]
+                self.flipped= calibration_data["flipped"]
 
                 self.show_roi_window() # Show ROI if ROI window is not currently shown
 
                 # Recalculate pixel-to-wavelength mapping
                 num_pixels = self.roi_end_x - self.roi_start_x
                 self.pixel_to_wavelength = np.linspace(self.start_wavelength, self.end_wavelength, num_pixels)
+
+                self.ax.set_xlabel("Wavelength (nm)")
+                self.ax.set_ylabel("Intensity")
+                self.ax.set_title("Spectral Intensity")
             except:
                 messagebox.showerror("Recall Error", "Could not load calibration data from file")
 
