@@ -2,11 +2,7 @@
 
 # Creates a virtual environment and installs dependencies
 
-if ! [$(python3 -m pip freeze) | grep "venv "]; then
-    python3 -m pip install venv
-fi
-
-python3 -m venv $(pwd)/.venv/
+python3 -m venv $(pwd)/.venv/ 2> /dev/null || printf "venv module not installed, please install python venv \ne.g. for Debian: sudo apt install python3-venv\n" && exit 1
 
 source $(pwd)/.venv/bin/activate
 

@@ -398,7 +398,8 @@ class SpectrumAnalyzerApp:
 
     def on_close(self):
         """Clean up resources before exiting the application."""
-        self.cap.release()
+        if self.cap != None:
+            self.cap.release()
         self.root.quit()
 
 if __name__ == "__main__":
