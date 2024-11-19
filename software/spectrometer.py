@@ -1,21 +1,24 @@
 import cv2
 import tkinter as tk
+from tkinter import ttk
 from tkinter import Label, Toplevel, simpledialog, filedialog, messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
 import json
 
+
 class SpectrumAnalyzerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Webcam Spectrum Analyzer")
-
+        
+        self.cap = None
+        self.active = False
         self.webcam_id : int = 0
 
-        # Capture video from webcam
-        self.cap = cv2.VideoCapture(self.webcam_id) # Adjust this according to your webcam selection, will be removed in the future
-        
+        self.select_cam()
+
         self.flipped = False
 
         # Create a label to display the frames
@@ -67,6 +70,7 @@ class SpectrumAnalyzerApp:
 
         spectrummenu = tk.Menu(menubar, tearoff=0)
         spectrummenu.add_command(label="Flip horizontally", command=self.flip)
+        spectrummenu.add_command(label="Select different camera", command=self.select_cam)
         spectrummenu.add_command(label="Recalibrate Spectrum", command=self.recalibrate)
         spectrummenu.add_command(label="Reselect ROI", command=self.reselect)
         menubar.add_cascade(label="Spectrum", menu=spectrummenu)
@@ -75,6 +79,50 @@ class SpectrumAnalyzerApp:
 
     def flip(self):
         self.flipped = not self.flipped
+
+    def list_webcams(self) -> list[int]:
+        i = 0
+        arr = []
+        while i < 10:
+            try:
+                cap = cv2.VideoCapture(i)
+                if cap.read()[0]:
+                    arr.append(i)
+                cap.release()
+            except:
+                pass
+            i += 1
+        return arr
+        return [0,1,2,3,4]
+    
+    def select_cam(self) -> int:
+        cams = self.list_webcams()
+        # Create a new Toplevel window
+        popup = tk.Toplevel(self.root)
+        self.root
+        popup.title("Select Webcam")
+        popup.geometry("300x200")  # Set size of the popup window
+
+        # Add a label to the popup window
+        ttk.Label(popup, text="Please choose the webcam:").pack(pady=10)
+
+        # Dropdown (Combobox) inside the popup
+        selected_option = tk.IntVar(value=cams[0])  # Default value
+        dropdown = ttk.Combobox(popup, textvariable=selected_option, values=cams, state="readonly")
+        dropdown.pack(pady=10)
+
+        def confirm_selection():
+            self.active = False
+            self.webcam_id = selected_option.get()
+            popup.destroy()  # Close the popup
+            if self.cap != None: # Delete old cap
+                self.cap.release()
+            # Capture video from webcam
+            self.cap = cv2.VideoCapture(self.webcam_id)
+            self.active = True
+
+        ttk.Button(popup, text="OK", command=confirm_selection).pack(pady=10)
+
 
     def on_mouse_down(self, event):
         """Callback when the mouse button is pressed down, starting the ROI selection."""
@@ -98,6 +146,12 @@ class SpectrumAnalyzerApp:
         """Callback when the mouse button is released, finalizing the ROI."""
         self.selecting_roi = False
         if self.roi_start_x and self.roi_start_y and self.roi_end_x and self.roi_end_y:
+            #Allow selecting in both directions
+            if self.roi_start_x > self.roi_end_x:
+                self.roi_start_x, self.roi_end_x = self.roi_end_x, self.roi_start_x
+            if self.roi_start_y > self.roi_end_y:
+                self.roi_start_y, self.roi_end_y = self.roi_end_y, self.roi_start_y
+
             # Create a new window to display the ROI
             self.show_roi_window()
             # After selecting the ROI, prompt the user for wavelength calibration
@@ -164,39 +218,40 @@ class SpectrumAnalyzerApp:
 
     def update_frame(self):
         """Continuously update the webcam feed and ROI in real-time."""
-        # Read a frame from the webcam
-        ret, frame = self.cap.read()
-        
-        if self.flipped == True:
-            frame = cv2.flip(frame, 1) #Flip each Frame if flip is selected
-
-        if ret:
-            # Convert the frame to RGB (since OpenCV uses BGR by default)
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # Draw the selected ROI rectangle on the frame (if ROI is selected)
-            if self.roi_start_x and self.roi_start_y and self.roi_end_x and self.roi_end_y:
-                cv2.rectangle(rgb_frame, (self.roi_start_x, self.roi_start_y), 
-                              (self.roi_end_x, self.roi_end_y), (255, 0, 0), 2)
-
-                # Extract the ROI if selection is finalized
-                if not self.selecting_roi:
-                    roi = rgb_frame[self.roi_start_y:self.roi_end_y, self.roi_start_x:self.roi_end_x]
-
-                    # Process the ROI (for example, display it and map wavelengths)
-                    self.update_roi_window(roi)
-
-                    # If calibration is done, sum the columns and update the graph
-                    if self.pixel_to_wavelength is not None:
-                        self.plot_spectrum(roi)
-
-            # Convert frame to an image format Tkinter can display
-            img = Image.fromarray(rgb_frame)
-            imgtk = ImageTk.PhotoImage(image=img)
-
-            # Update the label with the new frame
-            self.label.imgtk = imgtk
-            self.label.configure(image=imgtk)
+        if self.active == True:
+            # Read a frame from the webcam
+            ret, frame = self.cap.read()
+            
+            if self.flipped == True:
+                frame = cv2.flip(frame, 1) #Flip each Frame if flip is selected
+    
+            if ret:
+                # Convert the frame to RGB (since OpenCV uses BGR by default)
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
+                # Draw the selected ROI rectangle on the frame (if ROI is selected)
+                if self.roi_start_x and self.roi_start_y and self.roi_end_x and self.roi_end_y:
+                    cv2.rectangle(rgb_frame, (self.roi_start_x, self.roi_start_y), 
+                                  (self.roi_end_x, self.roi_end_y), (255, 0, 0), 2)
+    
+                    # Extract the ROI if selection is finalized
+                    if not self.selecting_roi:
+                        roi = rgb_frame[self.roi_start_y:self.roi_end_y, self.roi_start_x:self.roi_end_x]
+    
+                        # Process the ROI (for example, display it and map wavelengths)
+                        self.update_roi_window(roi)
+    
+                        # If calibration is done, sum the columns and update the graph
+                        if self.pixel_to_wavelength is not None:
+                            self.plot_spectrum(roi)
+    
+                # Convert frame to an image format Tkinter can display
+                img = Image.fromarray(rgb_frame)
+                imgtk = ImageTk.PhotoImage(image=img)
+    
+                # Update the label with the new frame
+                self.label.imgtk = imgtk
+                self.label.configure(image=imgtk)
 
         # Repeat after 10 ms
         self.root.after(10, self.update_frame)
@@ -289,6 +344,7 @@ class SpectrumAnalyzerApp:
                     "end_wavelength": self.end_wavelength,
                     "roi_start": (self.roi_start_x, self.roi_start_y),
                     "roi_end": (self.roi_end_x, self.roi_end_y),
+                    "webcam_id" : self.webcam_id,
                 }
 
                 json.dump(calibration_data, filename)
@@ -306,11 +362,26 @@ class SpectrumAnalyzerApp:
             try:
                 with open(filename, "r") as f:
                     calibration_data = json.load(f)
+                self.active = False
+                old_webcam_id = self.webcam_id
+
                 self.start_wavelength = calibration_data["start_wavelength"]
                 self.end_wavelength = calibration_data["end_wavelength"]
                 self.roi_start_x, self.roi_start_y = calibration_data["roi_start"]
                 self.roi_end_x, self.roi_end_y = calibration_data["roi_end"]
-                self.flipped= calibration_data["flipped"]
+                self.flipped = calibration_data["flipped"]
+                self.webcam_id = calibration_data["webcam_id"]
+
+                if self.cap != None: # Delete old cap
+                    self.cap.release()
+                try:
+                    self.cap = cv2.VideoCapture(self.webcam_id)
+                except:
+                    try:
+                        self.cap = cv2.VideoCapture(old_webcam_id)
+                    except:
+                        pass
+                self.active=True
 
                 self.show_roi_window() # Show ROI if ROI window is not currently shown
 

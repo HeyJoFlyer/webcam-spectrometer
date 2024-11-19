@@ -1,5 +1,5 @@
 opencv-python
-PyQt5
+#PyQt5 # pyqt caused problems
 pillow
 matplotlib
 numpy
